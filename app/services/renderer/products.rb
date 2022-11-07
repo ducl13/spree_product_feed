@@ -110,11 +110,11 @@ class Renderer::Products
     
     item << create_node("g:link", product_url(url_options, product) + "?variant=" + variant.id.to_s)
 
-    all_images = product.images&.to_a + product.variant_images&.to_a
+    all_images = product.images&.to_a + variant.images&.to_a
     all_images.each_with_index do |image, index|
       if index == 0
         item << create_node("g:image_link", image.my_cf_image_url(:large))
-      else
+      elsif !product.images.blank? && !product.images.include?(image)
         item << create_node("g:additional_image_link", image.my_cf_image_url(:large))
       end
     end
