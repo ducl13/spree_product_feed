@@ -5,3 +5,4 @@ en:
     show_in_product_feed: Show this varaint in product feed
     unique_identifier: Unique Identifier
     unique_identifier_type: Unique Identifier Type
+    feed_category: Product feed category

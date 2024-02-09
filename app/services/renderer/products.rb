@@ -134,16 +134,17 @@ class Renderer::Products
     item << create_node("g:sku", variant.sku)
     item << create_node("g:item_group_id", (current_store.id.to_s + "-" + product.id.to_s).downcase)
     item << create_node("g:product_type", google_product_type(product))
-    
+    item << create_node("g:custom_label_0", product.feed_category)
+
     options_xml_hash.each_with_index do |ops, index|
       if ops.option_type[:name] == "color"
         item << create_node("g:" + ops.option_type.presentation.downcase.parameterize(separator: '_'), ops.name)
-        item << create_node("g:custom_label_" + index.to_s, ops.name) unless index > 4
+        item << create_node("g:custom_label_" + (index+1).to_s, ops.name) unless (index+1) > 5
       else
         # item << create_node("g:" + ops.option_type.presentation.downcase.parameterize(separator: '_'), ops.presentation)
         # Output option type as "size" for Google
         item << create_node("g:size", ops.presentation)
-        item << create_node("g:custom_label_" + index.to_s, ops.presentation) unless index > 4
+        item << create_node("g:custom_label_" + (index+1).to_s, ops.presentation) unless (index+1) > 5
       end
     end
     
