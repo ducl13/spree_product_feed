@@ -1,23 +1,22 @@
 class ProductFeedCreatorAwsS3 < ApplicationService
   FEED_FILE_NAME = "product-feed"
 
-  def initialize(url_options, current_store, current_currency, products, index)
+  def initialize(url_options, current_store, current_currency, product_id, index)
     @url_options = url_options
     @current_store = current_store
     @current_currency = current_currency
-    @products = products
+    @product = Spree::Product.find_by(id: product_id)
     @file_name = "#{FEED_FILE_NAME}-#{index}.xml"
   end
 
   def call()
     generate_feed_file()
     upload_to_s3()
-    GC.start
+    GC.start(full_mark: true, immediate_sweep: true)
   end
 
   def generate_feed_file()
-    xml = Renderer::Products.xml(@url_options, @current_store, @current_currency, @products)
-
+    xml = Renderer::Products.xml(@url_options, @current_store, @current_currency, @product.id)
     file = File.new("./tmp/#{@file_name}", 'w')
     file.sync = true
     file.write(xml)

@@ -2,9 +2,10 @@ require 'libxml'
 
 class Renderer::Products
   def self.product_url(url_options, product)
-    url = url_options[:host]
+    url = url_options["host"]
     url = url + ":" + url_options[:port].to_s if url_options[:port]
     url = url + "/products/" + product.slug
+
     url
   end
 
@@ -153,41 +154,43 @@ class Renderer::Products
     end    
   end
 
-  def self.xml(url_options, current_store, current_currency, products)
-    doc = create_doc_xml("rss", { :attributes => { "xmlns:g" => "http://base.google.com/ns/1.0", "version" => "2.0" } })
-    doc.root << (channel = create_node("channel"))
+  def self.xml(url_options, current_store, current_currency, product)
+        product = Spree::Product.find_by(id: product)
 
-    channel << create_node("title", current_store.name)
-    channel << create_node("link", current_store.url)
-    channel << create_node("description", "Find out about new products first! Always be in the know when new products become available")
-    
-    if defined?(current_store.default_locale) && !current_store.default_locale.nil?
-      channel << create_node("language", current_store.default_locale.downcase)
-    else
-      channel << create_node("language", "en-us")
-    end
+  # Create the XML document
+  doc = create_doc_xml("rss", { :attributes => { "xmlns:g" => "http://base.google.com/ns/1.0", "version" => "2.0" } })
+  doc.root << (channel = create_node("channel"))
 
-    products = products.except(:limit, :offset)
-    products.each_with_index do |product, index|
-      if product.is_in_hide_from_nav_taxon?
-        next
-      elsif product.feed_active?
-        if product.variants_and_option_values(current_currency).any?
-          product.variants.each do |variant|
-            if variant.show_in_product_feed?
-              channel << (item = create_node("item"))
-              complex_product(url_options, current_store, current_currency, item, product, variant)
-            end
-          end
-        else
+  # Add store details to the channel
+  channel << create_node("title", current_store.name)
+  channel << create_node("link", current_store.url)
+  channel << create_node("description", "Find out about new products first! Always be in the know when new products become available")
+
+  if defined?(current_store.default_locale) && !current_store.default_locale.nil?
+    channel << create_node("language", current_store.default_locale.downcase)
+  else
+    channel << create_node("language", "en-us")
+  end
+
+  # Process the single product
+  if product.is_in_hide_from_nav_taxon?
+    return doc.to_s # Exit if product is hidden
+  elsif product.feed_active?
+    if product.variants_and_option_values(current_currency).any?
+      product.variants.each do |variant|
+        if variant.show_in_product_feed?
           channel << (item = create_node("item"))
-          basic_product(url_options, current_store, current_currency, item, product)
+          complex_product(url_options, current_store, current_currency, item, product, variant)
         end
       end
-
-      GC.start if index % 100 == 0 # forcing garbage collection
+    else
+      channel << (item = create_node("item"))
+      basic_product(url_options, current_store, current_currency, item, product)
     end
-
-    doc.to_s
   end
+
+  # Return the XML as a string
+  doc.to_s
+end
+
 end
