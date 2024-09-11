@@ -12,7 +12,7 @@ class ProductFeedCreatorAwsS3 < ApplicationService
   def call()
     generate_feed_file()
     upload_to_s3()
-    GC.start
+    GC.start(full_mark: true, immediate_sweep: true)
   end
 
   def generate_feed_file()
