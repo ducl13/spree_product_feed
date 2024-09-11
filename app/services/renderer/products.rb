@@ -3,7 +3,7 @@ require 'libxml'
 class Renderer::Products
   def self.product_url(url_options, product)
     url = url_options["host"]
-    url = url + ":" + url_options[:port].to_s if url_options[:port]
+    url = url + ":" + url_options["port"].to_s if url_options["port"]
     url = url + "/products/" + product.slug
 
     url
@@ -40,7 +40,8 @@ class Renderer::Products
     end
   end
 
-  def self.basic_product(url_options, current_store, current_currency, item, product)
+  def self.basic_product(url_options, current_store_id, current_currency, item, product)
+    current_store = Spree::Store.find_by(id: current_store_id)
     item << create_node("g:id", current_store.id.to_s + "-" + product.id.to_s)
 
     unless product.property("g:title").present?
@@ -57,7 +58,7 @@ class Renderer::Products
         item << create_node("g:description", product.meta_description)
       end
     end
-    
+
     item << create_node("g:link", product_url(url_options, product))
 
     product.images&.each_with_index do |image, index|
@@ -88,7 +89,8 @@ class Renderer::Products
     end
   end
 
-  def self.complex_product(url_options, current_store, current_currency, item, product, variant)
+  def self.complex_product(url_options, current_store_id, current_currency, item, product, variant)
+    current_store = Spree::Store.find_by(id: current_store_id)
     options_xml_hash = Spree::Variants::XmlFeedOptionsPresenter.new(variant).xml_options
     
     item << create_node("g:id", (current_store.id.to_s + "-" + product.id.to_s + "-" + variant.id.to_s).downcase)
@@ -108,7 +110,7 @@ class Renderer::Products
         item << create_node("g:description", product.meta_description)
       end
     end
-    
+
     item << create_node("g:link", product_url(url_options, product) + "?variant=" + variant.id.to_s)
 
     all_images = product.images&.to_a + variant.images&.to_a
@@ -154,43 +156,27 @@ class Renderer::Products
     end    
   end
 
-  def self.xml(url_options, current_store, current_currency, product)
-        product = Spree::Product.find_by(id: product)
+  def self.xml(url_options, current_store, current_currency, products)
+    doc = create_doc_xml("rss", { :attributes => { "xmlns:g" => "http://base.google.com/ns/1.0", "version" => "2.0" } })
+    doc.root << (channel = create_node("channel"))
 
-  # Create the XML document
-  doc = create_doc_xml("rss", { :attributes => { "xmlns:g" => "http://base.google.com/ns/1.0", "version" => "2.0" } })
-  doc.root << (channel = create_node("channel"))
+    channel << create_node("title", current_store.name)
+    channel << create_node("link", current_store.url)
+    channel << create_node("description", "Find out about new products first! Always be in the know when new products become available")
 
-  # Add store details to the channel
-  channel << create_node("title", current_store.name)
-  channel << create_node("link", current_store.url)
-  channel << create_node("description", "Find out about new products first! Always be in the know when new products become available")
-
-  if defined?(current_store.default_locale) && !current_store.default_locale.nil?
-    channel << create_node("language", current_store.default_locale.downcase)
-  else
-    channel << create_node("language", "en-us")
-  end
-
-  # Process the single product
-  if product.is_in_hide_from_nav_taxon?
-    return doc.to_s # Exit if product is hidden
-  elsif product.feed_active?
-    if product.variants_and_option_values(current_currency).any?
-      product.variants.each do |variant|
-        if variant.show_in_product_feed?
-          channel << (item = create_node("item"))
-          complex_product(url_options, current_store, current_currency, item, product, variant)
-        end
-      end
+    if defined?(current_store.default_locale) && !current_store.default_locale.nil?
+      channel << create_node("language", current_store.default_locale.downcase)
     else
-      channel << (item = create_node("item"))
-      basic_product(url_options, current_store, current_currency, item, product)
+      channel << create_node("language", "en-us")
     end
+
+    products = products.except(:limit, :offset)
+     products.find_in_batches(batch_size: 100) do |products|
+      product_ids = products.pluck(:id)
+        ProcessProductChunkWorker.perform_async(url_options, current_store.id, current_currency,product_ids, channel)
+      GC.start
+    end
+
+    doc.to_s
   end
-
-  # Return the XML as a string
-  doc.to_s
-end
-
 end

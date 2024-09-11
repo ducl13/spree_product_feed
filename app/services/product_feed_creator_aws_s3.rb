@@ -1,11 +1,11 @@
 class ProductFeedCreatorAwsS3 < ApplicationService
   FEED_FILE_NAME = "product-feed"
 
-  def initialize(url_options, current_store, current_currency, product_id, index)
+  def initialize(url_options, current_store, current_currency, products, index)
     @url_options = url_options
     @current_store = current_store
     @current_currency = current_currency
-    @product = Spree::Product.find_by(id: product_id)
+    @products = products
     @file_name = "#{FEED_FILE_NAME}-#{index}.xml"
   end
 
@@ -16,7 +16,8 @@ class ProductFeedCreatorAwsS3 < ApplicationService
   end
 
   def generate_feed_file()
-    xml = Renderer::Products.xml(@url_options, @current_store, @current_currency, @product.id)
+    xml = Renderer::Products.xml(@url_options, @current_store, @current_currency, @products)
+
     file = File.new("./tmp/#{@file_name}", 'w')
     file.sync = true
     file.write(xml)
