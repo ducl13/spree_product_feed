@@ -16,12 +16,7 @@ class ProductFeedCreatorAwsS3 < ApplicationService
   end
 
   def generate_feed_file()
-    xml = Renderer::Products.xml(@url_options, @current_store, @current_currency, @products)
-
-    file = File.new("./tmp/#{@file_name}", 'w')
-    file.sync = true
-    file.write(xml)
-    file.close
+    xml = Renderer::Products.xml(@url_options, @current_store, @current_currency, @products, @file_name)
   end
 
   def object_uploaded?(s3_client, bucket_name, object_key, file)
