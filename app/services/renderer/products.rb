@@ -39,7 +39,7 @@ class Renderer::Products
     end
   end
 
-  def self.basic_product(url_options, current_store, current_currency, item, product)
+  def self.basic_product(url_options, current_store, current_currency, item, product, last_xml_product)
     item << create_node("g:id", current_store.id.to_s + "-" + product.id.to_s)
 
     unless product.property("g:title").present?
@@ -81,13 +81,17 @@ class Renderer::Products
     item << create_node("g:" + product.unique_identifier_type, product.unique_identifier)
     item << create_node("g:sku", product.sku)
     item << create_node("g:product_type", google_product_type(product))
+
+    if product.id == last_xml_product.id
+      last_xml_product.update(status: "processed")
+    end
     
     unless product.product_properties.blank?
       props(item, product)
     end
   end
 
-  def self.complex_product(url_options, current_store, current_currency, item, product, variant)
+  def self.complex_product(url_options, current_store, current_currency, item, product, variant, last_xml_product)
     options_xml_hash = Spree::Variants::XmlFeedOptionsPresenter.new(variant).xml_options
     
     item << create_node("g:id", (current_store.id.to_s + "-" + product.id.to_s + "-" + variant.id.to_s).downcase)
@@ -147,6 +151,14 @@ class Renderer::Products
         item << create_node("g:custom_label_" + (index+1).to_s, ops.presentation) unless (index+1) > 5
       end
     end
+
+       puts "<<<<<<<<<<<<<<<<<<<<<<product: #{product.id}<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<"
+        puts "<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<< complax Xml product: #{last_xml_product.product_id}<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<"
+
+
+    if product.id == last_xml_product.product_id
+      last_xml_product.update(status: "processed")
+    end
     
     unless product.product_properties.blank?
       props(item, product)
@@ -154,10 +166,29 @@ class Renderer::Products
   end
 
   def self.xml(url_options, current_store, current_currency,products, file_name)
+    doc = create_doc_xml("rss", { :attributes => { "xmlns:g" => "http://base.google.com/ns/1.0", "version" => "2.0" } })
+    doc.root << (channel = create_node("channel"))
 
-    products.each_slice(100) do |batch_products|
+    channel << create_node("title", current_store.name)
+    channel << create_node("link", current_store.url)
+    channel << create_node("description", "Find out about new products first! Always be in the know when new products become available")
+    
+    if defined?(current_store.default_locale) && !current_store.default_locale.nil?
+      channel << create_node("language", current_store.default_locale.downcase)
+    else
+      channel << create_node("language", "en-us")
+    end
+    
+    file = File.new("./tmp/#{file_name}", 'w')
+    doc = doc.to_s.gsub("</channel>\n\</rss>\n","")
+    file.write(doc)
+    total_batch = products.each_slice(100)
+    batch_size = total_batch.size
+
+    last_xml_product = Spree::XmlProduct.find_or_create_by(product_id: products.last.id)
+    total_batch.each_with_index do |batch_products, batch_index|
       product_ids = batch_products.pluck(:id)
-      ProcessProductChunkWorker.perform_async(url_options, current_store.id, current_currency,product_ids, file_name)
+      ProcessProductChunkWorker.perform_async(url_options, current_store.id, current_currency, product_ids, file_name, nil , nil, batch_size, batch_index, last_xml_product.product_id)
     end
   end
 end

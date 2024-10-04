@@ -1,42 +1,77 @@
 class SingleProductFeedWorker
   include Sidekiq::Worker
+  sidekiq_options queue: :xml_product
 
-  def perform(url_options, current_store_id, current_currency, product_id, file_name)
+  def perform(url_options, current_store_id, current_currency, product_id, file_name, channel_string, doc_string, batch_size, batch_index, last_product_id, last_xml_product_id)
+    last_xml_product = Spree::XmlProduct.find_by(product_id: last_xml_product_id)
     current_store = Spree::Store.find current_store_id
-
-    doc = Renderer::Products.create_doc_xml("rss", { :attributes => { "xmlns:g" => "http://base.google.com/ns/1.0", "version" => "2.0" } })
-    doc.root << (channel = Renderer::Products.create_node("channel"))
-
-    channel << Renderer::Products.create_node("title", current_store.name)
-    channel << Renderer::Products.create_node("link", current_store.url)
-    channel << Renderer::Products.create_node("description", "Find out about new products first! Always be in the know when new products become available")
-
-    if defined?(current_store.default_locale) && !current_store.default_locale.nil?
-      channel << Renderer::Products.create_node("language", current_store.default_locale.downcase)
-    else
-      channel << Renderer::Products.create_node("language", "en-us")
-    end
-
-    file = File.new("./tmp/#{file_name}", 'w')
-    file.sync = true
     product = Spree::Product.find_by(id: product_id)
     if product.is_in_hide_from_nav_taxon?
-      return
-    elsif product.feed_active?
+      if (batch_size == (batch_index + 1) && last_xml_product_id == product_id)
+        last_xml_product.update(status: "processed")
+        append_rss_end_tag(file_name, batch_size, batch_index, product_id, last_xml_product)
+      end
+     return
+    end
+    if product.feed_active?
       if product.variants_and_option_values(current_currency).any?
         product.variants.each do |variant|
           if variant.show_in_product_feed?
-            channel << (item = Renderer::Products.create_node("item"))
-            Renderer::Products.complex_product(url_options, current_store, current_currency, item, product, variant)
+            item = Renderer::Products.create_node("item")
+            Renderer::Products.complex_product(url_options, current_store, current_currency, item, product, variant, last_xml_product)
+            file = File.open(Rails.root.join('tmp', file_name), 'a+')
+            if file.include?('</channel>')
+              debugger
+              data =  "\n</channel>\n</rss>"
+              file.to_s.gsub(data,"")
+              file.write(item.to_s)
+              file.write(data)
+            else
+              file.write(item.to_s) 
+            end
+
+            if batch_size == (batch_index+1) && last_xml_product_id == product_id
+              append_rss_end_tag(file_name, batch_size, batch_index, product_id, last_xml_product)
+             end
           end
         end
       else
-        channel << (item = Renderer::Products.create_node("item"))
-        Renderer::Products.basic_product(url_options, current_store, current_currency, item, product)
+        item = Renderer::Products.create_node("item")
+        Renderer::Products.basic_product(url_options, current_store, current_currency, item, product, last_xml_product)
+        file = File.open(Rails.root.join('tmp', file_name), 'a+') # Use 'w' to open for writing
+        if file.include?('</channel>')
+          data =  "\n</channel>\n</rss>"
+          file.to_s.gsub(data,"")
+          file.write(item.to_s)
+          file.write(data)
+        else
+          file.write(item.to_s) 
+        end
+        if batch_size == (batch_index+1) && last_xml_product_id == product_id
+          last_xml_product.update(status: "processed")
+          append_rss_end_tag(file_name, batch_size, batch_index, last_product_id, last_xml_product)
+         end
       end
-    file.write(doc.to_s)
-    file.close
-    end    
+    else
+      if batch_size == (batch_index+1) && last_xml_product_id == product_id
+        last_xml_product.update(status: "processed")
+        append_rss_end_tag(file_name, batch_size, batch_index, last_product_id, last_xml_product)
+     end
+    end
     GC.start(full_mark: true, immediate_sweep: true)
+  end
+
+  private
+
+  def append_rss_end_tag(file_name, batch_size, batch_index, last_product_id, last_xml_product)
+    sleep(10)
+    if last_product_id == last_xml_product.product_id && last_xml_product.status == "processed"
+      file = File.open(Rails.root.join('tmp', file_name), 'a+')
+      file.seek(0, IO::SEEK_END)
+      data =  "\n</channel>\n</rss>"
+      file.write(data)
+      file.close
+      last_xml_product.update(status: nil)
+    end
   end
 end
