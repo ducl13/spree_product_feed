@@ -39,7 +39,7 @@ class Renderer::Products
     end
   end
 
-  def self.basic_product(url_options, current_store, current_currency, item, product, last_xml_product)
+  def self.basic_product(url_options, current_store, current_currency, item, product, last_xml_product, batch_size, batch_index,product_index)
     item << create_node("g:id", current_store.id.to_s + "-" + product.id.to_s)
 
     unless product.property("g:title").present?
@@ -91,7 +91,7 @@ class Renderer::Products
     end
   end
 
-  def self.complex_product(url_options, current_store, current_currency, item, product, variant, last_xml_product)
+  def self.complex_product(url_options, current_store, current_currency, item, product, variant, last_xml_product, batch_size, batch_index,product_index)
     options_xml_hash = Spree::Variants::XmlFeedOptionsPresenter.new(variant).xml_options
     
     item << create_node("g:id", (current_store.id.to_s + "-" + product.id.to_s + "-" + variant.id.to_s).downcase)
@@ -152,11 +152,7 @@ class Renderer::Products
       end
     end
 
-       puts "<<<<<<<<<<<<<<<<<<<<<<product: #{product.id}<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<"
-        puts "<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<< complax Xml product: #{last_xml_product.product_id}<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<"
-
-
-    if product.id == last_xml_product.product_id
+    if (batch_size == (batch_index + 1) && product_index == 99)
       last_xml_product.update(status: "processed")
     end
     
