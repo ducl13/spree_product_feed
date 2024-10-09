@@ -1,6 +1,6 @@
 class ProcessProductChunkWorker
   include Sidekiq::Worker
-    sidekiq_options queue: :xml_product
+    # sidekiq_options queue: :xml_product
 
   def perform(url_options, current_store_id, current_currency, product_ids, file_name, channel, doc,  batch_size, batch_index, last_xml_product_id)
      product_ids.each do |product_id|

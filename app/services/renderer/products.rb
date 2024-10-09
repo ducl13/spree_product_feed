@@ -81,10 +81,6 @@ class Renderer::Products
     item << create_node("g:" + product.unique_identifier_type, product.unique_identifier)
     item << create_node("g:sku", product.sku)
     item << create_node("g:product_type", google_product_type(product))
-
-    if product.id == last_xml_product.id
-      last_xml_product.update(status: "processed")
-    end
     
     unless product.product_properties.blank?
       props(item, product)
@@ -152,13 +148,9 @@ class Renderer::Products
       end
     end
 
-       puts "<<<<<<<<<<<<<<<<<<<<<<product: #{product.id}<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<"
-        puts "<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<< complax Xml product: #{last_xml_product.product_id}<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<"
+       # puts "<<<<<<<<<<<<<<<<<<<<<<product: #{product.id}<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<"
+       #  puts "<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<< complax Xml product: #{last_xml_product.product_id}<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<"
 
-
-    if product.id == last_xml_product.product_id
-      last_xml_product.update(status: "processed")
-    end
     
     unless product.product_properties.blank?
       props(item, product)
@@ -182,6 +174,7 @@ class Renderer::Products
     file = File.new("./tmp/#{file_name}", 'w')
     doc = doc.to_s.gsub("</channel>\n\</rss>\n","")
     file.write(doc)
+    # products = products.sort_by { |product| product[:created_at] }
     total_batch = products.each_slice(100)
     batch_size = total_batch.size
 
