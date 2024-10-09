@@ -1,190 +1,149 @@
 require 'libxml'
 
 class Renderer::Products
+  def self.create_xml_header(url_options, current_store)
+    <<~XML
+      <?xml version="1.0" encoding="UTF-8"?>
+      <rss xmlns:g="http://base.google.com/ns/1.0" version="2.0">
+        <channel>
+          <title>#{current_store.name}</title>
+          <link>#{current_store.url}</link>
+          <description>Find out about new products first!</description>
+          <language>en-us</language>
+    XML
+  end
+
+  def self.create_xml_footer
+    "</channel></rss>"
+  end
+
+  def self.xml_batch(url_options, current_store, current_currency, products)
+    batch_xml = ""
+    products.each_with_index do |product, index|
+      next unless product.feed_active?
+
+      if product.variants_and_option_values(current_currency).any?
+        product.variants.each do |variant|
+          next unless variant.show_in_product_feed?
+          batch_xml << render_variant_xml(url_options, current_store, current_currency, product, variant)
+        end
+      else
+        batch_xml << render_product_xml(url_options, current_store, current_currency, product)
+      end
+    end
+    batch_xml
+  end
+
+  def self.render_product_xml(url_options, current_store, current_currency, product)
+    # Simplified XML generation for a product
+    <<~XML
+      <item>
+        <g:id>#{current_store.id.to_s + "-" + product.id.to_s}</g:id>
+        #{ product.property("g:title").present? ? "<g:title>#{product.property('g:title')}</g:title>" : "<g:title>#{current_store.name + ' ' + product.name}</g:title>" }
+        <g:condition>new</g:condition>
+        #{ 
+          if product.property("g:description").present?
+            ""
+          else
+            if product.respond_to?(:short_description) && product.short_description.present?
+              "<g:description>#{product.short_description}</g:description>"
+            elsif product.description.present?
+              "<g:description>#{product.description}</g:description>"
+            else
+              "<g:description>#{product.meta_description}</g:description>"
+            end
+          end
+        }
+        <g:link>#{product_url(url_options, product)}</g:link>
+        #{ 
+          product.images&.map.with_index do |image, index|
+            if index == 0
+              "<g:image_link>#{image.my_cf_image_url(:large)}</g:image_link>"
+            else
+              "<g:additional_image_link>#{image.my_cf_image_url(:large)}</g:additional_image_link>"
+            end
+          end.join("\n")
+        }
+        <g:availability>#{product.in_stock? ? "in stock" : "out of stock"}</g:availability>
+        #{ 
+          if product.on_sale?
+            "<g:price>#{sprintf('%.2f', product.original_price)} #{current_currency}</g:price>\n<g:sale_price>#{sprintf('%.2f', product.price)} #{current_currency}</g:sale_price>"
+          else
+            "<g:price>#{sprintf('%.2f', product.original_price)} #{current_currency}</g:price>"
+          end
+        }
+        <g:shipping_weight>#{sprintf('%.2f', product.weight)} lb</g:shipping_weight>
+        <g:brand>#{current_store.name}</g:brand>
+        <g:#{product.unique_identifier_type}>#{product.unique_identifier}</g:#{product.unique_identifier_type}>
+        <g:sku>#{product.sku}</g:sku>
+        <g:product_type>#{google_product_type(product)}</g:product_type>
+        #{last_xml_product.update(status: "processed") if product.id == last_xml_product.id}
+        #{!product.product_properties.blank? ? props(product) : ""}
+      </item>
+    XML
+  end
+
+  def self.render_variant_xml(url_options, current_store, current_currency, product, variant)
+      options_xml_hash = Spree::Variants::XmlFeedOptionsPresenter.new(variant).xml_options
+    <<~XML
+      <item>
+        <g:id>#{(current_store.id.to_s + "-" + product.id.to_s + "-" + variant.id.to_s).downcase}</g:id>
+        #{product.property("g:title").present? ? "" : "<g:title>#{current_store.name + ' ' + product.name + ' ' + options_xml_hash.first.presentation}</g:title>"}
+        <g:condition>new</g:condition>
+        #{ 
+          if product.property("g:description").present?
+            ""
+          else
+            if product.respond_to?(:short_description) && product.short_description.present?
+              "<g:description>#{product.short_description}</g:description>"
+            elsif product.description.present?
+              "<g:description>#{product.description}</g:description>"
+            else
+              "<g:description>#{product.meta_description}</g:description>"
+            end
+          end
+        }
+        <g:link>#{product_url(url_options, product) + "?variant=" + variant.id.to_s}</g:link>
+        #{ 
+          (product.images.to_a + variant.images.to_a).map.with_index do |image, index|
+            if index == 0
+              "<g:image_link>#{image.my_cf_image_url(:large)}</g:image_link>"
+            elsif !product.images.blank? && !product.images.include?(image)
+              "<g:additional_image_link>#{image.my_cf_image_url(:large)}</g:additional_image_link>"
+            end
+          end.join("\n")
+        }
+        <g:availability>#{product.in_stock? ? "in stock" : "out of stock"}</g:availability>
+        #{ 
+          if variant.on_sale?
+            "<g:price>#{sprintf('%.2f', variant.original_price)} #{current_currency}</g:price>\n<g:sale_price>#{sprintf('%.2f', variant.price)} #{current_currency}</g:sale_price>"
+          else
+            "<g:price>#{sprintf('%.2f', variant.original_price)} #{current_currency}</g:price>"
+          end
+        }
+        <g:shipping_weight>#{sprintf('%.2f', variant.weight)} lb</g:shipping_weight>
+        <g:brand>#{current_store.name}</g:brand>
+        <g:#{variant.unique_identifier_type}>#{product.unique_identifier}</g:#{variant.unique_identifier_type}>
+        <g:sku>#{variant.sku}</g:sku>
+        <g:item_group_id>#{(current_store.id.to_s + "-" + product.id.to_s).downcase}</g:item_group_id>
+        <g:product_type>#{google_product_type(product)}</g:product_type>
+        <g:custom_label_0>#{product.feed_category}</g:custom_label_0>
+        #{ 
+          options_xml_hash.each_with_index.map do |ops, index|
+            if ops.option_type[:name] == "color"
+              "<g:#{ops.option_type.presentation.downcase.parameterize(separator: '_')}>#{ops.name}</g>\n<g:custom_label_#{index+1}>#{ops.name}</g:custom_label_#{index+1}>" unless (index+1) > 5
+            else
+              "<g:size>#{ops.presentation}</g:size>\n<g:custom_label_#{index+1}>#{ops.presentation}</g:custom_label_#{index+1}>" unless (index+1) > 5
+            end
+          end.join("\n")
+        }
+      </item>
+    XML
+  end
+
   def self.product_url(url_options, product)
     url = url_options["host"]
-    url = url + ":" + url_options[:port].to_s if url_options["port"]
-    url = url + "/products/" + product.slug
-    url
-  end
-
-  def self.create_doc_xml(root, attributes=nil)
-    doc = LibXML::XML::Document.new
-    doc.encoding = LibXML::XML::Encoding::UTF_8
-    doc.root = create_node(root, nil, attributes)
-    doc
-  end
-
-  def self.create_node(name, value=nil, options=nil)
-    node = LibXML::XML::Node.new(name)
-    node.content = value.to_s unless value.nil?
-    if options
-      attributes = options.delete(:attributes)
-      add_attributes(node, attributes) if attributes
-    end
-    node
-  end
-
-  def self.add_attributes(node, attributes)
-    attributes.each do |name, value|
-      LibXML::XML::Attr.new(node, name, value)
-    end
-  end
-
-  def self.props(item, product)
-    product.product_properties.each do |product_property|
-      if product_property.property.presentation.downcase == "product_feed"
-        item << create_node(product_property.property.name.downcase, product_property.value)
-      end
-    end
-  end
-
-  def self.basic_product(url_options, current_store, current_currency, item, product, last_xml_product, batch_size, batch_index,product_index)
-    item << create_node("g:id", current_store.id.to_s + "-" + product.id.to_s)
-
-    unless product.property("g:title").present?
-      item << create_node("g:title", current_store.name + ' ' + product.name)
-    end
-    item << create_node("g:condition", 'new')
-
-    unless product.property("g:description").present?
-      if product.respond_to?(:short_description) && product.short_description.present?
-        item << create_node("g:description", product.short_description)
-      elsif product.description.present?
-        item << create_node("g:description", product.description)
-      else
-        item << create_node("g:description", product.meta_description)
-      end
-    end
-    
-    item << create_node("g:link", product_url(url_options, product))
-
-    product.images&.each_with_index do |image, index|
-      if index == 0
-        item << create_node("g:image_link", image.my_cf_image_url(:large))
-      else
-        item << create_node("g:additional_image_link", image.my_cf_image_url(:large))
-      end
-    end
-    
-    item << create_node("g:availability", product.in_stock? ? "in stock" : "out of stock")
-    if product.on_sale?
-      item << create_node("g:price", sprintf("%.2f", product.original_price) + " " + current_currency)
-      item << create_node("g:sale_price", sprintf("%.2f", product.price) + " " + current_currency)
-    else
-      item << create_node("g:price", sprintf("%.2f", product.original_price) + " " + current_currency)
-    end
-
-    item << create_node("g:shipping_weight", sprintf("%.2f", product.weight) + " lb")
-
-    item << create_node("g:brand", current_store.name)
-    item << create_node("g:" + product.unique_identifier_type, product.unique_identifier)
-    item << create_node("g:sku", product.sku)
-    item << create_node("g:product_type", google_product_type(product))
-
-    if product.id == last_xml_product.id
-      last_xml_product.update(status: "processed")
-    end
-    
-    unless product.product_properties.blank?
-      props(item, product)
-    end
-  end
-
-  def self.complex_product(url_options, current_store, current_currency, item, product, variant, last_xml_product, batch_size, batch_index,product_index)
-    options_xml_hash = Spree::Variants::XmlFeedOptionsPresenter.new(variant).xml_options
-    
-    item << create_node("g:id", (current_store.id.to_s + "-" + product.id.to_s + "-" + variant.id.to_s).downcase)
-
-    unless product.property("g:title").present?
-      item << create_node("g:title", current_store.name + ' ' + product.name + ' ' + options_xml_hash.first.presentation)
-    end
-
-    item << create_node("g:condition", 'new')
-
-    unless product.property("g:description").present?
-      if product.respond_to?(:short_description) && product.short_description.present?
-        item << create_node("g:description", product.short_description)
-      elsif product.description.present?
-        item << create_node("g:description", product.description)
-      else
-        item << create_node("g:description", product.meta_description)
-      end
-    end
-    
-    item << create_node("g:link", product_url(url_options, product) + "?variant=" + variant.id.to_s)
-
-    all_images = product.images&.to_a + variant.images&.to_a
-    all_images.each_with_index do |image, index|
-      if index == 0
-        item << create_node("g:image_link", image.my_cf_image_url(:large))
-      elsif !product.images.blank? && !product.images.include?(image)
-        item << create_node("g:additional_image_link", image.my_cf_image_url(:large))
-      end
-    end
-
-    item << create_node("g:availability", product.in_stock? ? "in stock" : "out of stock")
-    if variant.on_sale?
-      item << create_node("g:price", sprintf("%.2f", variant.original_price) + " " + current_currency)
-      item << create_node("g:sale_price", sprintf("%.2f", variant.price) + " " + current_currency)
-    else
-      item << create_node("g:price", sprintf("%.2f", variant.original_price) + " " + current_currency)
-    end
-
-    item << create_node("g:shipping_weight", sprintf("%.2f", variant.weight) + " lb")
-
-    item << create_node("g:brand", current_store.name)
-    item << create_node("g:" + variant.unique_identifier_type, product.unique_identifier)
-    item << create_node("g:sku", variant.sku)
-    item << create_node("g:item_group_id", (current_store.id.to_s + "-" + product.id.to_s).downcase)
-    item << create_node("g:product_type", google_product_type(product))
-    item << create_node("g:custom_label_0", product.feed_category)
-
-    options_xml_hash.each_with_index do |ops, index|
-      if ops.option_type[:name] == "color"
-        item << create_node("g:" + ops.option_type.presentation.downcase.parameterize(separator: '_'), ops.name)
-        item << create_node("g:custom_label_" + (index+1).to_s, ops.name) unless (index+1) > 5
-      else
-        # item << create_node("g:" + ops.option_type.presentation.downcase.parameterize(separator: '_'), ops.presentation)
-        # Output option type as "size" for Google
-        item << create_node("g:size", ops.presentation)
-        item << create_node("g:custom_label_" + (index+1).to_s, ops.presentation) unless (index+1) > 5
-      end
-    end
-
-    if (batch_size == (batch_index + 1) && product_index == 99)
-      last_xml_product.update(status: "processed")
-    end
-    
-    unless product.product_properties.blank?
-      props(item, product)
-    end    
-  end
-
-  def self.xml(url_options, current_store, current_currency,products, file_name)
-    doc = create_doc_xml("rss", { :attributes => { "xmlns:g" => "http://base.google.com/ns/1.0", "version" => "2.0" } })
-    doc.root << (channel = create_node("channel"))
-
-    channel << create_node("title", current_store.name)
-    channel << create_node("link", current_store.url)
-    channel << create_node("description", "Find out about new products first! Always be in the know when new products become available")
-    
-    if defined?(current_store.default_locale) && !current_store.default_locale.nil?
-      channel << create_node("language", current_store.default_locale.downcase)
-    else
-      channel << create_node("language", "en-us")
-    end
-    
-    file = File.new("./tmp/#{file_name}", 'w')
-    doc = doc.to_s.gsub("</channel>\n\</rss>\n","")
-    file.write(doc)
-    total_batch = products.each_slice(100)
-    batch_size = total_batch.size
-
-    last_xml_product = Spree::XmlProduct.find_or_create_by(product_id: products.last.id)
-    total_batch.each_with_index do |batch_products, batch_index|
-      product_ids = batch_products.pluck(:id)
-      ProcessProductChunkWorker.perform_async(url_options, current_store.id, current_currency, product_ids, file_name, nil , nil, batch_size, batch_index, last_xml_product.product_id)
-    end
+    url += ":#{url_options['port']}" if url_options["port"]
+    "#{url}/products/#{product.slug}"
   end
 end
