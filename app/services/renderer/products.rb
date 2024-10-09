@@ -36,6 +36,9 @@ class Renderer::Products
 
   def self.render_product_xml(url_options, current_store, current_currency, product)
     # Simplified XML generation for a product
+    base_url = url_options[:host] || "http://naturesflavors.localhost:3000"
+    product_url = base_url + product_url(url_options, product)
+
     <<~XML
       <item>
         <g:id>#{current_store.id.to_s + "-" + product.id.to_s}</g:id>
@@ -54,7 +57,7 @@ class Renderer::Products
             end
           end
         }
-        <g:link>#{product_url(url_options, product)}</g:link>
+        <g:link>#{ product_url}</g:link>
         #{ 
           product.images&.map.with_index do |image, index|
             if index == 0
@@ -77,7 +80,6 @@ class Renderer::Products
         <g:#{product.unique_identifier_type}>#{product.unique_identifier}</g:#{product.unique_identifier_type}>
         <g:sku>#{product.sku}</g:sku>
         <g:product_type>#{google_product_type(product)}</g:product_type>
-        #{last_xml_product.update(status: "processed") if product.id == last_xml_product.id}
         #{!product.product_properties.blank? ? props(product) : ""}
       </item>
     XML
@@ -85,6 +87,9 @@ class Renderer::Products
 
   def self.render_variant_xml(url_options, current_store, current_currency, product, variant)
       options_xml_hash = Spree::Variants::XmlFeedOptionsPresenter.new(variant).xml_options
+      base_url = url_options[:host] || "http://naturesflavors.localhost:3000"
+      product_url = base_url + product_url(url_options, product) + "?variant=" + variant.id.to_s
+
     <<~XML
       <item>
         <g:id>#{(current_store.id.to_s + "-" + product.id.to_s + "-" + variant.id.to_s).downcase}</g:id>
@@ -103,7 +108,7 @@ class Renderer::Products
             end
           end
         }
-        <g:link>#{product_url(url_options, product) + "?variant=" + variant.id.to_s}</g:link>
+        <g:link>#{product_url}</g:link>
         #{ 
           (product.images.to_a + variant.images.to_a).map.with_index do |image, index|
             if index == 0
