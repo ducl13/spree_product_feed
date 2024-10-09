@@ -8,9 +8,17 @@ class Renderer::Products
         <channel>
           <title>#{current_store.name}</title>
           <link>#{current_store.url}</link>
-          <description>Find out about new products first!</description>
-          <language>en-us</language>
+          <description>Find out about new products first! Always be in the know when new products become available</description>
+          <language>#{generate_language_xml(current_store)}</language>
     XML
+  end
+
+  def self.generate_language_xml(current_store)
+    if defined?(current_store.default_locale) && !current_store.default_locale.nil?
+      current_store.default_locale.downcase
+    else
+      "en-us"
+    end
   end
 
   def self.create_xml_footer
