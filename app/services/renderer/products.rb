@@ -80,7 +80,7 @@ class Renderer::Products
         <g:#{product.unique_identifier_type}>#{product.unique_identifier}</g:#{product.unique_identifier_type}>
         <g:sku>#{product.sku}</g:sku>
         <g:product_type>#{google_product_type(product)}</g:product_type>
-        #{!product.product_properties.blank? ? props(product) : ""}
+        #{product.product_properties.map { |pp| "<product_feed_property><name>#{pp.property.name.downcase}</name><value>#{pp.value}</value></product_feed_property>" if pp.property.presentation.downcase == 'product_feed' }.join("\n")}
       </item>
     XML
   end
@@ -142,6 +142,7 @@ class Renderer::Products
             end
           end.join("\n")
         }
+        #{product.product_properties.map { |pp| "<product_feed_property><name>#{pp.property.name.downcase}</name><value>#{pp.value}</value></product_feed_property>" if pp.property.presentation.downcase == 'product_feed' }.join("\n")}
       </item>
     XML
   end
