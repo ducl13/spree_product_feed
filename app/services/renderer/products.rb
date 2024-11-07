@@ -57,11 +57,11 @@ class Renderer::Products
             ""
           else
             if product.respond_to?(:short_description) && product.short_description.present?
-              "<g:description>#{product.short_description}</g:description>"
+              create_node("g:description", product.short_description)
             elsif product.description.present?
-              "<g:description>#{product.description}</g:description>"
+             create_node("g:description", product.description)
             else
-              "<g:description>#{product.meta_description}</g:description>"
+              create_node("g:description", product.meta_description)
             end
           end
         }
@@ -69,9 +69,9 @@ class Renderer::Products
         #{ 
           product.images&.map.with_index do |image, index|
             if index == 0
-              "<g:image_link>#{image.my_cf_image_url(:large)}</g:image_link>"
+              create_node("g:image_link", image.my_cf_image_url(:large))
             else
-              "<g:additional_image_link>#{image.my_cf_image_url(:large)}</g:additional_image_link>"
+             create_node("g:additional_image_link", image.my_cf_image_url(:large))
             end
           end.join("\n")
         }
@@ -87,7 +87,7 @@ class Renderer::Products
         <g:brand>#{current_store.name}</g:brand>
         <g:#{product.unique_identifier_type}>#{product.unique_identifier}</g:#{product.unique_identifier_type}>
         <g:sku>#{product.sku}</g:sku>
-        <g:product_type>#{google_product_type(product)}</g:product_type>
+        <g:product_type>#{create_node("g:product_type", google_product_type(product))}</g:product_type>
         <product_properties>#{product.product_properties.map { |pp| "<product_feed_property><name>#{pp.property.name.downcase}</name><value>#{pp.value}</value></product_feed_property>" if pp.property.presentation.downcase == 'product_feed' }.join("\n")}</product_properties>
       </item>
     XML
@@ -108,11 +108,11 @@ class Renderer::Products
                 ""
               else
                 if product.respond_to?(:short_description) && product.short_description.present?
-                  "<g:description>#{product.short_description}</g:description>"
+                 create_node("g:description", product.short_description)
                 elsif product.description.present?
-                  "<g:description>#{product.description}</g:description>"
+                  create_node("g:description", product.description)
                 else
-                  "<g:description>#{product.meta_description}</g:description>"
+                  create_node("g:description", product.meta_description)
                 end
               end
             }
@@ -120,9 +120,9 @@ class Renderer::Products
             #{ 
               (product.images.to_a + variant.images.to_a).map.with_index do |image, index|
                 if index == 0
-                  "<g:image_link>#{image.my_cf_image_url(:large)}</g:image_link>"
+                  create_node("g:image_link", image.my_cf_image_url(:large))
                 elsif !product.images.blank? && !product.images.include?(image)
-                  "<g:additional_image_link>#{image.my_cf_image_url(:large)}</g:additional_image_link>"
+                  create_node("g:additional_image_link", image.my_cf_image_url(:large))
                 end
               end.join("\n")
             }
@@ -139,7 +139,7 @@ class Renderer::Products
             <g:#{variant.unique_identifier_type}>#{product.unique_identifier}</g:#{variant.unique_identifier_type}>
             <g:sku>#{variant.sku}</g:sku>
             <g:item_group_id>#{(current_store.id.to_s + "-" + product.id.to_s).downcase}</g:item_group_id>
-            <g:product_type>#{google_product_type(product)}</g:product_type>
+            #{create_node("g:product_type", google_product_type(product))}
             <g:custom_label_0>#{product.feed_category}</g:custom_label_0>
             #{ 
               options_xml_hash.each_with_index.map do |ops, index|
@@ -153,6 +153,16 @@ class Renderer::Products
             <product_properties>#{product.product_properties.map { |pp| "<product_feed_property><name>#{pp.property.name.downcase}</name><value>#{pp.value}</value></product_feed_property>" if pp.property.presentation.downcase == 'product_feed' }.join("\n")}</product_properties>
           </item>
     XML
+  end
+
+  def self.create_node(name, value=nil, options=nil)
+    node = LibXML::XML::Node.new(name)
+    node.content = value.to_s unless value.nil?
+    if options
+      attributes = options.delete(:attributes)
+      add_attributes(node, attributes) if attributes
+    end
+    node
   end
 
   def self.product_url(url_options, product)
