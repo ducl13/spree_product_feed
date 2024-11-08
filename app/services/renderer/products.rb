@@ -44,13 +44,11 @@ class Renderer::Products
 
   def self.render_product_xml(url_options, current_store, current_currency, product)
     # Simplified XML generation for a product
-    base_url = url_options[:host] || "http://naturesflavors.localhost:3000"
-    product_url = base_url + product_url(url_options, product)
 
     <<~XML
       <item>
         <g:id>#{current_store.id.to_s + "-" + product.id.to_s}</g:id>
-        #{ product.property("g:title").present? ? "<g:title>#{product.property('g:title')}</g:title>" : "<g:title>#{current_store.name + ' ' + product.name}</g:title>" }
+        #{ product.property("g:title").present? ? "" : create_node("g:title", current_store.name + ' ' + product.name) }
         <g:condition>new</g:condition>
         #{ 
           if product.property("g:description").present?
@@ -65,7 +63,7 @@ class Renderer::Products
             end
           end
         }
-        <g:link>#{ product_url}</g:link>
+        #{create_node("g:link", product_url(url_options, product))}
         #{ 
           product.images&.map.with_index do |image, index|
             if index == 0
@@ -78,30 +76,33 @@ class Renderer::Products
         <g:availability>#{product.in_stock? ? "in stock" : "out of stock"}</g:availability>
         #{ 
           if product.on_sale?
-            "<g:price>#{sprintf('%.2f', product.original_price)} #{current_currency}</g:price>\n<g:sale_price>#{sprintf('%.2f', product.price)} #{current_currency}</g:sale_price>"
+            create_node("g:price", sprintf("%.2f", product.original_price) + " " + current_currency)
+            create_node("g:sale_price", sprintf("%.2f", product.price) + " " + current_currency)
           else
-            "<g:price>#{sprintf('%.2f', product.original_price)} #{current_currency}</g:price>"
+            create_node("g:price", sprintf("%.2f", product.original_price) + " " + current_currency)
           end
         }
-        <g:shipping_weight>#{sprintf('%.2f', product.weight)} lb</g:shipping_weight>
-        <g:brand>#{current_store.name}</g:brand>
-        <g:#{product.unique_identifier_type}>#{product.unique_identifier}</g:#{product.unique_identifier_type}>
-        <g:sku>#{product.sku}</g:sku>
+        #{create_node("g:shipping_weight", sprintf("%.2f", product.weight) + " lb")}
+        #{create_node("g:brand", current_store.name)}
+        #{create_node("g:" + product.unique_identifier_type, product.unique_identifier)}
+        #{create_node("g:sku", product.sku)}
         <g:product_type>#{create_node("g:product_type", google_product_type(product))}</g:product_type>
-        <product_properties>#{product.product_properties.map { |pp| "<product_feed_property><name>#{pp.property.name.downcase}</name><value>#{pp.value}</value></product_feed_property>" if pp.property.presentation.downcase == 'product_feed' }.join("\n")}</product_properties>
+        #{
+          unless product.product_properties.blank?
+            props(item, product)
+          end
+        }
       </item>
     XML
   end
 
   def self.render_variant_xml(url_options, current_store, current_currency, product, variant)
       options_xml_hash = Spree::Variants::XmlFeedOptionsPresenter.new(variant).xml_options
-      base_url = url_options[:host] || "http://naturesflavors.localhost:3000"
-      product_url = base_url + product_url(url_options, product) + "?variant=" + variant.id.to_s
 
     <<~XML
           <item>
             <g:id>#{(current_store.id.to_s + "-" + product.id.to_s + "-" + variant.id.to_s).downcase}</g:id>
-            #{product.property("g:title").present? ? "" : "<g:title>#{current_store.name + ' ' + product.name + ' ' + options_xml_hash.first.presentation}</g:title>"}
+            #{product.property("g:title").present? ? "" : create_node("g:title", current_store.name + ' ' + product.name + ' ' + options_xml_hash.first.presentation)}
             <g:condition>new</g:condition>
             #{ 
               if product.property("g:description").present?
@@ -116,7 +117,7 @@ class Renderer::Products
                 end
               end
             }
-            <g:link>#{product_url}</g:link>
+            #{create_node("g:link", product_url(url_options, product) + "?variant=" + variant.id.to_s)}
             #{ 
               (product.images.to_a + variant.images.to_a).map.with_index do |image, index|
                 if index == 0
@@ -129,15 +130,16 @@ class Renderer::Products
             <g:availability>#{product.in_stock? ? "in stock" : "out of stock"}</g:availability>
             #{ 
               if variant.on_sale?
-                "<g:price>#{sprintf('%.2f', variant.original_price)} #{current_currency}</g:price>\n<g:sale_price>#{sprintf('%.2f', variant.price)} #{current_currency}</g:sale_price>"
+                create_node("g:price", sprintf("%.2f", variant.original_price) + " " + current_currency)
+                create_node("g:sale_price", sprintf("%.2f", variant.price) + " " + current_currency)
               else
-                "<g:price>#{sprintf('%.2f', variant.original_price)} #{current_currency}</g:price>"
+                create_node("g:price", sprintf("%.2f", variant.original_price) + " " + current_currency)
               end
             }
-            <g:shipping_weight>#{sprintf('%.2f', variant.weight)} lb</g:shipping_weight>
-            <g:brand>#{current_store.name}</g:brand>
-            <g:#{variant.unique_identifier_type}>#{product.unique_identifier}</g:#{variant.unique_identifier_type}>
-            <g:sku>#{variant.sku}</g:sku>
+            #{create_node("g:shipping_weight", sprintf("%.2f", variant.weight) + " lb")}
+            #{create_node("g:brand", current_store.name)}
+            #{create_node("g:" + variant.unique_identifier_type, product.unique_identifier)}
+            #{create_node("g:sku", variant.sku)}
             <g:item_group_id>#{(current_store.id.to_s + "-" + product.id.to_s).downcase}</g:item_group_id>
             #{create_node("g:product_type", google_product_type(product))}
             <g:custom_label_0>#{product.feed_category}</g:custom_label_0>
@@ -150,7 +152,11 @@ class Renderer::Products
                 end
               end.join("\n")
             }
-            <product_properties>#{product.product_properties.map { |pp| "<product_feed_property><name>#{pp.property.name.downcase}</name><value>#{pp.value}</value></product_feed_property>" if pp.property.presentation.downcase == 'product_feed' }.join("\n")}</product_properties>
+            #{
+              unless product.product_properties.blank?
+                props(item, product)
+              end
+            }
           </item>
     XML
   end
@@ -163,6 +169,14 @@ class Renderer::Products
       add_attributes(node, attributes) if attributes
     end
     node
+  end
+
+  def self.props(item, product)
+    product.product_properties.each do |product_property|
+      if product_property.property.presentation.downcase == "product_feed"
+        create_node(product_property.property.name.downcase, product_property.value)
+      end
+    end
   end
 
   def self.product_url(url_options, product)
