@@ -171,7 +171,7 @@ class Renderer::Products
     node
   end
 
-  def self.props(item, product)
+  def self.props(product)
     product.product_properties.each do |product_property|
       if product_property.property.presentation.downcase == "product_feed"
         create_node(product_property.property.name.downcase, product_property.value)
