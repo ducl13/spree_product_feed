@@ -89,7 +89,7 @@ class Renderer::Products
         <g:product_type>#{create_node("g:product_type", google_product_type(product))}</g:product_type>
         #{
           unless product.product_properties.blank?
-            props(item, product)
+            props(product)
           end
         }
       </item>
@@ -154,7 +154,7 @@ class Renderer::Products
             }
             #{
               unless product.product_properties.blank?
-                props(item, product)
+                props(product)
               end
             }
           </item>
