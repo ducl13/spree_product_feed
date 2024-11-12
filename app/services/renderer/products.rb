@@ -89,7 +89,15 @@ class Renderer::Products
         <g:product_type>#{create_node("g:product_type", google_product_type(product))}</g:product_type>
         #{
           unless product.product_properties.blank?
-            props(product)
+            property_value = []
+            product.product_properties.each do |product_property|
+              if product_property.property.presentation.downcase == "product_feed"
+                property_value << product_property.value
+              end
+            end
+            if property_value.present?
+              "<product_feed>#{property_value.join("")}</product_feed>"
+            end
           end
         }
       </item>
@@ -154,7 +162,15 @@ class Renderer::Products
             }
             #{
               unless product.product_properties.blank?
-                props(product)
+                property_value = []
+                product.product_properties.each do |product_property|
+                  if product_property.property.presentation.downcase == "product_feed"
+                    property_value << product_property.value
+                  end
+                end
+                if property_value.present?
+                  "<product_feed>#{property_value.join("")}</product_feed>"
+                end
               end
             }
           </item>
@@ -171,17 +187,10 @@ class Renderer::Products
     node
   end
 
-  def self.props(product)
-    product.product_properties.each do |product_property|
-      if product_property.property.presentation.downcase == "product_feed"
-        create_node(product_property.property.name.downcase, product_property.value)
-      end
-    end
-  end
-
   def self.product_url(url_options, product)
-    url = url_options["host"]
-    url += ":#{url_options['port']}" if url_options["port"]
-    "#{url}/products/#{product.slug}"
+    url = url_options[:host]
+    url = url + ":" + url_options[:port].to_s if url_options[:port]
+    url = url + "/products/" + product.slug
+    url
   end
 end
