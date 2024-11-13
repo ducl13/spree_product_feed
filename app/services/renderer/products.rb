@@ -150,7 +150,7 @@ class Renderer::Products
             #{create_node("g:sku", variant.sku)}
             <g:item_group_id>#{(current_store.id.to_s + "-" + product.id.to_s).downcase}</g:item_group_id>
             #{create_node("g:product_type", google_product_type(product))}
-            <g:custom_label_0>#{product.feed_category}</g:custom_label_0>
+            #{create_node("g:custom_label_0", product.feed_category)}
             #{ 
               options_xml_hash.each_with_index.map do |ops, index|
                 if ops.option_type[:name] == "color"
